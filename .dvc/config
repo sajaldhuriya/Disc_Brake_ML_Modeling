@@ -1,0 +1,4 @@
+[core]
+    remote = aws_remote
+['remote "aws_remote"']
+    url = s3://disc-brake-mlops-storage
