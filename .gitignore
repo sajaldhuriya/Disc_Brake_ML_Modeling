@@ -219,3 +219,6 @@ __marimo__/
 
 disc_brake/
 /artifacts
+
+mlruns.db
+mlruns/
