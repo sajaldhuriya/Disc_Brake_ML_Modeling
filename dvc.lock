@@ -20,11 +20,11 @@ stages:
       params.yaml:
         data_transformation.physics_mode: full
         model_training.hyperparameter_tuning: true
-        model_training.model_name: ExtraTrees
+        model_training.model_name: Ridge
         pipeline_control.log_to_mlflow: true
     outs:
     - path: artifacts/
       hash: md5
-      md5: 3e038224d5bafd34a30a6ecefc343d82.dir
-      size: 2440052
+      md5: 135d1f0e2e21434a0bceb4655153cd97.dir
+      size: 357156
       nfiles: 7

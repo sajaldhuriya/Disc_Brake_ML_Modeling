@@ -7,7 +7,7 @@ data_transformation:
 model_training:
   # Options: ExtraTrees, RandomForest, DecisionTree, LinearRegression, Ridge, Lasso, 
   # KNeighbors, GradientBoosting, XGBoost, SVR, NeuralNetwork
-  model_name: "ExtraTrees"  
+  model_name: "Ridge"  
   hyperparameter_tuning: true
   
   hyperparameters:
