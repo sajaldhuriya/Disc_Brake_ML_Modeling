@@ -13,18 +13,18 @@ stages:
       size: 1884
     - path: src/
       hash: md5
-      md5: b8fa93c3d3184d1eedc920fad9930d99.dir
+      md5: 26f339803d6c18394eecfcaa2698dd6e.dir
       size: 60420
       nfiles: 18
     params:
       params.yaml:
-        data_transformation.physics_mode: none
+        data_transformation.physics_mode: full
         model_training.hyperparameter_tuning: true
-        model_training.model_name: DecisionTree
+        model_training.model_name: ExtraTrees
         pipeline_control.log_to_mlflow: true
     outs:
     - path: artifacts/
       hash: md5
-      md5: cfeb25148a86890f2bc8a3761230ace9.dir
-      size: 272162
+      md5: 3e038224d5bafd34a30a6ecefc343d82.dir
+      size: 2440052
       nfiles: 7
