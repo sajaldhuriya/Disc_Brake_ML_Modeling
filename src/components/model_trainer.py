@@ -1,10 +1,21 @@
 import os
 import sys
 from dataclasses import dataclass
+import numpy as np
+
 import mlflow
 import mlflow.sklearn
-from sklearn.ensemble import ExtraTreesRegressor
-from sklearn.model_selection import RandomizedSearchCV
+import mlflow.tensorflow
+
+# Sklearn & ML Models
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor, GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.svm import SVR
+from xgboost import XGBRegressor
+from sklearn.model_selection import RandomizedSearchCV, ParameterSampler
 from sklearn.metrics import r2_score
 
 from src.exception import CustomException
@@ -13,86 +24,144 @@ from src.utils import save_object
 
 @dataclass
 class ModelTrainerConfig:
-    trained_model_file_path = os.path.join("artifacts", "model.pkl")
+    trained_model_file_path_pkl = os.path.join("artifacts", "model.pkl")
+    trained_model_file_path_keras = os.path.join("artifacts", "model.keras")
 
 class ModelTrainer:
     def __init__(self):
         self.model_trainer_config = ModelTrainerConfig()
 
-    def initiate_model_trainer(self, train_array, test_array, tuning_mode=True):
+    def initiate_model_trainer(self, train_array, test_array, model_name, tuning_mode, log_to_mlflow, physics_mode, param_grid=None):
         try:
-            logging.info("Splitting training and test data arrays")
-            # Tree models don't need y-scaling, so we use raw unscaled targets directly.
+            logging.info(f"Extracting arrays. Model: {model_name} | Tuning: {tuning_mode}")
             X_train, y_train, X_test, y_test = (
-                train_array[:, :-4],
-                train_array[:, -4:],
-                test_array[:, :-4],
-                test_array[:, -4:]
+                train_array[:, :-4], train_array[:, -4:],
+                test_array[:, :-4], test_array[:, -4:]
             )
+            input_dim = X_train.shape[1]
+            output_dim = y_train.shape[1]
 
-            # Set MLflow tracking URI for local storage
-            mlflow.set_tracking_uri("sqlite:///mlruns.db")
-            mlflow.set_experiment("Disc_Brake_Thermal_Analysis")
+            model = None
+            best_params = {}
 
-            # Distinct run names so each test shows up clearly in the MLflow UI.
-            run_name = "Tuned_ExtraTrees" if tuning_mode else "Baseline_ExtraTrees"
+            # ==========================================
+            # BLOCK 1: TENSORFLOW / KERAS NEURAL NETWORK
+            # ==========================================
+            if model_name == "NeuralNetwork":
+                import tensorflow as tf
+                from tensorflow import keras
 
-            with mlflow.start_run(run_name=run_name):
-                if tuning_mode:
-                    logging.info("Starting Hyperparameter Tuning with RandomizedSearchCV...")
-                    base_model = ExtraTreesRegressor(random_state=42, n_jobs=-1)
+                def build_keras_model(params):
+                    nn = keras.Sequential([
+                        keras.layers.InputLayer(input_shape=(input_dim,)),
+                        keras.layers.Dense(params.get('neurons_layer_1', 64), activation='relu'),
+                        keras.layers.Dense(params.get('neurons_layer_2', 32), activation='relu'),
+                        keras.layers.Dense(output_dim, activation='linear')
+                    ])
+                    optimizer = keras.optimizers.Adam(learning_rate=params.get('learning_rate', 0.001))
+                    nn.compile(optimizer=optimizer, loss='mse')
+                    return nn
 
-                    param_distributions = {
-                        'n_estimators': [50, 100, 200, 300],
-                        'max_depth': [None, 10, 20, 30, 40],
-                        'min_samples_split': [2, 5, 10],
-                        'min_samples_leaf': [1, 2, 4],
-                    }
+                if tuning_mode and param_grid:
+                    logging.info(f"Starting Custom Grid Search for Neural Network...")
+                    # Generate 5 random hyperparameter combinations
+                    param_list = list(ParameterSampler(param_grid, n_iter=5, random_state=42))
+                    best_r2 = -float('inf')
 
+                    for p in param_list:
+                        temp_model = build_keras_model(p)
+                        temp_model.fit(X_train, y_train, epochs=p.get('epochs', 50), batch_size=p.get('batch_size', 32), verbose=0)
+                        y_pred_temp = temp_model.predict(X_test, verbose=0)
+                        r2_temp = r2_score(y_test, y_pred_temp)
+                        
+                        if r2_temp > best_r2:
+                            best_r2 = r2_temp
+                            model = temp_model
+                            best_params = p
+                    logging.info(f"Best NN parameters found: {best_params}")
+                else:
+                    logging.info("Training baseline Neural Network without tuning...")
+                    best_params = param_grid if param_grid else {'epochs': 50, 'batch_size': 32, 'learning_rate': 0.001, 'neurons_layer_1': 64, 'neurons_layer_2': 32}
+                    model = build_keras_model(best_params)
+                    model.fit(X_train, y_train, epochs=best_params.get('epochs', 50), batch_size=best_params.get('batch_size', 32), verbose=0)
+
+                # Save Neural Network
+                model.save(self.model_trainer_config.trained_model_file_path_keras)
+                logging.info(f"Keras Model saved to {self.model_trainer_config.trained_model_file_path_keras}")
+
+            # ==========================================
+            # BLOCK 2: STANDARD MACHINE LEARNING MODELS
+            # ==========================================
+            else:
+                models = {
+                    "ExtraTrees": ExtraTreesRegressor(random_state=42, n_jobs=-1),
+                    "RandomForest": RandomForestRegressor(random_state=42, n_jobs=-1),
+                    "DecisionTree": DecisionTreeRegressor(random_state=42),
+                    "LinearRegression": LinearRegression(),
+                    "Ridge": Ridge(),
+                    "Lasso": MultiOutputRegressor(Lasso()),
+                    "KNeighbors": KNeighborsRegressor(n_jobs=-1),
+                    "GradientBoosting": MultiOutputRegressor(GradientBoostingRegressor(random_state=42)),
+                    "XGBoost": XGBRegressor(random_state=42, n_jobs=-1),
+                    "SVR": MultiOutputRegressor(SVR())
+                }
+
+                if model_name not in models:
+                    raise Exception(f"Model '{model_name}' is not supported.")
+
+                base_model = models[model_name]
+
+                if tuning_mode and param_grid:
+                    logging.info(f"Starting Hyperparameter Tuning for {model_name}...")
                     search = RandomizedSearchCV(
-                        estimator=base_model,
-                        param_distributions=param_distributions,
-                        n_iter=10,
-                        cv=3,
-                        scoring='r2',
-                        random_state=42,
-                        n_jobs=-1,
+                        estimator=base_model, param_distributions=param_grid,
+                        n_iter=5, cv=3, scoring='r2', random_state=42, n_jobs=-1
                     )
                     search.fit(X_train, y_train)
-
                     model = search.best_estimator_
                     best_params = search.best_params_
-
-                    logging.info(f"Best Hyperparameters Found: {best_params}")
-                    mlflow.log_params(best_params)
-                    mlflow.log_param("tuning_strategy", "RandomizedSearchCV")
+                    logging.info(f"Best parameters found: {best_params}")
                 else:
-                    logging.info("Training baseline model without tuning...")
-                    model = ExtraTreesRegressor(
-                        n_estimators=100, random_state=42, n_jobs=-1
-                    )
+                    logging.info(f"Training baseline {model_name}...")
+                    model = base_model
                     model.fit(X_train, y_train)
-                    mlflow.log_param("tuning_strategy", "None - Baseline")
+                    best_params = {"tuning": "None"}
 
-                logging.info("Evaluating model on test set...")
-                y_pred = model.predict(X_test)
-                global_r2 = r2_score(y_test, y_pred)
+                # Save Standard ML Model
+                save_object(file_path=self.model_trainer_config.trained_model_file_path_pkl, obj=model)
+                logging.info(f"ML Model saved to {self.model_trainer_config.trained_model_file_path_pkl}")
 
-                logging.info(f"Global R2 Score: {global_r2}")
-                mlflow.log_metric("global_r2_score", global_r2)
-                mlflow.log_param("model", "ExtraTreesRegressor")
+            # ==========================================
+            # BLOCK 3: EVALUATION AND MLFLOW TRACKING
+            # ==========================================
+            logging.info("Evaluating model on test set...")
+            # Predict handles both sklearn and tf/keras outputs seamlessly
+            y_pred = model.predict(X_test)
+            global_r2 = r2_score(y_test, y_pred)
+            logging.info(f"Global R2 Score for {model_name}: {global_r2}")
 
-                # Log model to MLflow
-                mlflow.sklearn.log_model(model, "model")
+            if log_to_mlflow:
+                logging.info("Logging results to MLflow...")
+                mlflow.set_tracking_uri("sqlite:///mlruns.db")
+                mlflow.set_experiment("Disc_Brake_Thermal_Analysis")
+                
+                run_name = f"{model_name}_{'Tuned' if tuning_mode else 'Base'}_{physics_mode}"
+                
+                with mlflow.start_run(run_name=run_name):
+                    mlflow.log_param("model", model_name)
+                    mlflow.log_param("physics_mode", physics_mode)
+                    mlflow.log_params(best_params)
+                    mlflow.log_metric("global_r2_score", global_r2)
+                    
+                    # Log appropriately based on framework
+                    if model_name == "NeuralNetwork":
+                        mlflow.tensorflow.log_model(model, "model")
+                    else:
+                        mlflow.sklearn.log_model(model, "model")
+            else:
+                logging.info("MLflow logging is DISABLED in params.yaml. Skipping tracking.")
 
-                # Save model to artifacts
-                save_object(
-                    file_path=self.model_trainer_config.trained_model_file_path,
-                    obj=model
-                )
-                logging.info(f"Model saved to {self.model_trainer_config.trained_model_file_path}")
-
-                return global_r2
+            return global_r2
 
         except Exception as e:
             raise CustomException(e, sys)

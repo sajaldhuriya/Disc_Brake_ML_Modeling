@@ -1,0 +1,14 @@
+stages:
+  execute_pipeline:
+    cmd: python run_pipeline.py
+    deps:
+      - src/
+      - run_pipeline.py
+      - data/RawDataMergedFinal.csv
+    params:
+      - pipeline_control.log_to_mlflow
+      - data_transformation.physics_mode
+      - model_training.model_name
+      - model_training.hyperparameter_tuning
+    outs:
+      - artifacts/

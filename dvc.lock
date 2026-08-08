@@ -1,0 +1,30 @@
+schema: '2.0'
+stages:
+  execute_pipeline:
+    cmd: python run_pipeline.py
+    deps:
+    - path: data/RawDataMergedFinal.csv
+      hash: md5
+      md5: dd221f433a02981d9d3c1c9b6d99fa88
+      size: 122492
+    - path: run_pipeline.py
+      hash: md5
+      md5: 2704b3a8455402f4a46cde774875c6a1
+      size: 1884
+    - path: src/
+      hash: md5
+      md5: b8fa93c3d3184d1eedc920fad9930d99.dir
+      size: 60420
+      nfiles: 18
+    params:
+      params.yaml:
+        data_transformation.physics_mode: none
+        model_training.hyperparameter_tuning: true
+        model_training.model_name: DecisionTree
+        pipeline_control.log_to_mlflow: true
+    outs:
+    - path: artifacts/
+      hash: md5
+      md5: cfeb25148a86890f2bc8a3761230ace9.dir
+      size: 272162
+      nfiles: 7
