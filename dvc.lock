@@ -19,12 +19,12 @@ stages:
     params:
       params.yaml:
         data_transformation.physics_mode: full
-        model_training.hyperparameter_tuning: false
+        model_training.hyperparameter_tuning: true
         model_training.model_name: NeuralNetwork
         pipeline_control.log_to_mlflow: true
     outs:
     - path: artifacts/
       hash: md5
-      md5: bbcec21925d7ffd06e49fa948024b533.dir
-      size: 419181
+      md5: 5c9af7e8c3fcae7658125bd5c8c63034.dir
+      size: 419192
       nfiles: 7

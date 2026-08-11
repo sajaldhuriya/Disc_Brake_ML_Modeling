@@ -8,7 +8,7 @@ model_training:
   # Options: ExtraTrees, RandomForest, DecisionTree, LinearRegression, Ridge, Lasso, 
   # KNeighbors, GradientBoosting, XGBoost, SVR, NeuralNetwork
   model_name: "NeuralNetwork"  
-  hyperparameter_tuning: false
+  hyperparameter_tuning: true
   
   hyperparameters:
     ExtraTrees:
