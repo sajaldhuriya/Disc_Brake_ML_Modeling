@@ -1,5 +1,19 @@
 import os
 import sys
+import warnings
+import logging
+
+# 1. Suppress TensorFlow C++ backend warnings and oneDNN messages
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+# 2. Suppress Abseil (absl) logging warnings
+logging.getLogger('absl').setLevel(logging.ERROR)
+
+# 3. Suppress Keras UserWarnings (like the input_shape deprecation)
+warnings.filterwarnings('ignore', category=UserWarning, module='keras')
+warnings.filterwarnings('ignore', category=UserWarning)
+
 from dataclasses import dataclass
 import numpy as np
 
@@ -53,7 +67,7 @@ class ModelTrainer:
 
                 def build_keras_model(params):
                     nn = keras.Sequential([
-                        keras.layers.InputLayer(input_shape=(input_dim,)),
+                        keras.layers.Input(shape=(input_dim,)),
                         keras.layers.Dense(params.get('neurons_layer_1', 64), activation='relu'),
                         keras.layers.Dense(params.get('neurons_layer_2', 32), activation='relu'),
                         keras.layers.Dense(output_dim, activation='linear')

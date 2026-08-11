@@ -13,18 +13,18 @@ stages:
       size: 1884
     - path: src/
       hash: md5
-      md5: 26f339803d6c18394eecfcaa2698dd6e.dir
-      size: 60420
+      md5: ca107761b635d254d44786319e3746b7.dir
+      size: 61395
       nfiles: 18
     params:
       params.yaml:
         data_transformation.physics_mode: full
         model_training.hyperparameter_tuning: true
-        model_training.model_name: Ridge
-        pipeline_control.log_to_mlflow: true
+        model_training.model_name: NeuralNetwork
+        pipeline_control.log_to_mlflow: false
     outs:
     - path: artifacts/
       hash: md5
-      md5: 135d1f0e2e21434a0bceb4655153cd97.dir
-      size: 357156
+      md5: c0d2b4a9dc58bcdb414f538c9e036efb.dir
+      size: 445676
       nfiles: 7
