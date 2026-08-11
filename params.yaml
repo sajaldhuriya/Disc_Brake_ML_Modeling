@@ -1,5 +1,5 @@
 pipeline_control:
-  log_to_mlflow: false
+  log_to_mlflow: true
 
 data_transformation:
   physics_mode: "full"
@@ -8,7 +8,7 @@ model_training:
   # Options: ExtraTrees, RandomForest, DecisionTree, LinearRegression, Ridge, Lasso, 
   # KNeighbors, GradientBoosting, XGBoost, SVR, NeuralNetwork
   model_name: "NeuralNetwork"  
-  hyperparameter_tuning: true
+  hyperparameter_tuning: false
   
   hyperparameters:
     ExtraTrees:
