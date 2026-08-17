@@ -66,25 +66,66 @@ class ModelTrainer:
                 from tensorflow import keras
 
                 def build_keras_model(params):
-                    nn = keras.Sequential([
-                        keras.layers.Input(shape=(input_dim,)),
-                        keras.layers.Dense(params.get('neurons_layer_1', 64), activation='relu'),
-                        keras.layers.Dense(params.get('neurons_layer_2', 32), activation='relu'),
-                        keras.layers.Dense(output_dim, activation='linear')
-                    ])
-                    optimizer = keras.optimizers.Adam(learning_rate=params.get('learning_rate', 0.001))
-                    nn.compile(optimizer=optimizer, loss='mse')
+                    # 1. Build layers dynamically so we can conditionally add Dropout & BatchNorm
+                    layers = [keras.layers.Input(shape=(input_dim,))]
+                    
+                    # Hidden Layer 1
+                    layers.append(keras.layers.Dense(params.get('neurons_layer_1', 64)))
+                    if params.get('use_batch_norm', False):
+                        layers.append(keras.layers.BatchNormalization())
+                    layers.append(keras.layers.Activation('relu'))
+                    if params.get('dropout_rate', 0.0) > 0:
+                        layers.append(keras.layers.Dropout(params.get('dropout_rate', 0.0)))
+
+                    # Hidden Layer 2
+                    layers.append(keras.layers.Dense(params.get('neurons_layer_2', 32)))
+                    if params.get('use_batch_norm', False):
+                        layers.append(keras.layers.BatchNormalization())
+                    layers.append(keras.layers.Activation('relu'))
+                    if params.get('dropout_rate', 0.0) > 0:
+                        layers.append(keras.layers.Dropout(params.get('dropout_rate', 0.0)))
+
+                    # Output Layer
+                    layers.append(keras.layers.Dense(output_dim, activation='linear'))
+                    
+                    nn = keras.Sequential(layers)
+                    
+                    # 2. Dynamic Optimizer Selection
+                    opt_name = params.get('optimizer', 'adam').lower()
+                    lr = params.get('learning_rate', 0.001)
+                    
+                    if opt_name == 'sgd':
+                        optimizer = keras.optimizers.SGD(learning_rate=lr)
+                    elif opt_name == 'rmsprop':
+                        optimizer = keras.optimizers.RMSprop(learning_rate=lr)
+                    else:
+                        optimizer = keras.optimizers.Adam(learning_rate=lr)
+                        
+                    # 3. Dynamic Loss Selection
+                    loss_fn = params.get('loss', 'mse')
+                    
+                    nn.compile(optimizer=optimizer, loss=loss_fn, metrics=['mae'])
                     return nn
 
+                # --- HYPERPARAMETER TUNING LOOP ---
                 if tuning_mode and param_grid:
-                    logging.info(f"Starting Custom Grid Search for Neural Network...")
+                    logging.info("Starting Custom Grid Search for Neural Network...")
                     # Generate 5 random hyperparameter combinations
                     param_list = list(ParameterSampler(param_grid, n_iter=5, random_state=42))
                     best_r2 = -float('inf')
+                    best_history = None
 
                     for p in param_list:
                         temp_model = build_keras_model(p)
-                        temp_model.fit(X_train, y_train, epochs=p.get('epochs', 50), batch_size=p.get('batch_size', 32), verbose=0)
+                        
+                        # Fit the model and save its history
+                        history = temp_model.fit(
+                            X_train, y_train, 
+                            epochs=p.get('epochs', 50), 
+                            batch_size=p.get('batch_size', 32), 
+                            verbose=0
+                        )
+                        
                         y_pred_temp = temp_model.predict(X_test, verbose=0)
                         r2_temp = r2_score(y_test, y_pred_temp)
                         
@@ -92,12 +133,24 @@ class ModelTrainer:
                             best_r2 = r2_temp
                             model = temp_model
                             best_params = p
+                            best_history = history
+                            
                     logging.info(f"Best NN parameters found: {best_params}")
+                    
                 else:
                     logging.info("Training baseline Neural Network without tuning...")
-                    best_params = param_grid if param_grid else {'epochs': 50, 'batch_size': 32, 'learning_rate': 0.001, 'neurons_layer_1': 64, 'neurons_layer_2': 32}
+                    best_params = param_grid if param_grid else {
+                        'epochs': 50, 'batch_size': 32, 'learning_rate': 0.001, 
+                        'neurons_layer_1': 64, 'neurons_layer_2': 32,
+                        'optimizer': 'adam', 'loss': 'mse'
+                    }
                     model = build_keras_model(best_params)
-                    model.fit(X_train, y_train, epochs=best_params.get('epochs', 50), batch_size=best_params.get('batch_size', 32), verbose=0)
+                    history = model.fit(
+                        X_train, y_train, 
+                        epochs=best_params.get('epochs', 50), 
+                        batch_size=best_params.get('batch_size', 32), 
+                        verbose=0
+                    )
 
                 # Save Neural Network
                 model.save(self.model_trainer_config.trained_model_file_path_keras)
